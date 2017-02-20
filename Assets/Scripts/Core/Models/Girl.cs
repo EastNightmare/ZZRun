@@ -1,10 +1,12 @@
-﻿using Assets.Scripts.Core.Client.Managers;
+﻿using System.Collections.Generic;
+using System.Linq;
+using Assets.Scripts.Common;
+using Assets.Scripts.Core.Managers;
 using DG.Tweening;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-namespace Assets.Scripts.Core.Client.Models
+namespace Assets.Scripts.Core.Models
 {
     public class Girl : MonoBehaviour
     {
@@ -17,6 +19,7 @@ namespace Assets.Scripts.Core.Client.Models
         private bool m_IsDeading = false;
         private Sequence m_DeadSequence;
         private Animator m_Animator;
+        public List<GameObject> jumpThings = new List<GameObject>();
 
         private void Start()
         {
@@ -38,22 +41,13 @@ namespace Assets.Scripts.Core.Client.Models
         {
             if (col.gameObject.tag == "Ground")
             {
-                m_JumpCount = 0;
-                maxJumpCount = 2;
-                m_Animator.Play("Run");
-            }
-            else if (col.gameObject.tag == "Stack" && !m_IsDeading)
-            {
-                Dead();
-            }
-            else if (col.gameObject.tag == "Boy")
-            {
-                m_Animator.Play("Idle");
-                ScenesManager.instance.StopAllTwners();
-                if (++ScenesManager.instance.sceneIdx < ScenesManager.instance.sceneConfig.Count)
+                if (!m_IsDeading)
                 {
-                    ScenesManager.instance.GameStart(ScenesManager.instance.sceneIdx);
+                    m_JumpCount = 0;
+                    maxJumpCount = 2;
                 }
+
+                m_Animator.Play("Run");
             }
         }
 
@@ -61,14 +55,46 @@ namespace Assets.Scripts.Core.Client.Models
         {
             if (col.gameObject.tag == "JumpThing")
             {
-                GameObject.Destroy(col.gameObject);
+                jumpThings.Add(col.gameObject);
+                col.gameObject.SetActive(false);
                 maxJumpCount = 99999;
+            }
+
+            if (col.gameObject.tag == "Love")
+            {
+                m_Animator.Play("Idle");
+                ScenesManager.instance.StopAllTwners();
+                col.transform.position = Vector3.zero;
+                col.gameObject.GetComponent<SpriteRenderer>().DOFade(0.5f, 1.0f);
+                col.transform.DOScale(Vector3.one * 10.0f, 1.0f).OnComplete(() =>
+                {
+                    if (++ScenesManager.instance.sceneIdx < ScenesManager.instance.sceneConfig.Count)
+                    {
+                        ScenesManager.instance.GameStart(ScenesManager.instance.sceneIdx);
+                    }
+                });
+            }
+
+            if (col.gameObject.tag == "Stack" && !m_IsDeading)
+            {
+                m_Animator.Play("Idle");
+                ScenesManager.instance.StopAllTwners();
+                Dead();
+            }
+
+            if (col.gameObject.tag == "Boy")
+            {
+                m_IsDeading = true;
+                m_Animator.Play("Idle");
+                GetComponent<Collider2D>().enabled = false;
+                ScenesManager.instance.StopAllTwners();
+                ScenesManager.instance.End();
             }
         }
 
         private void Update()
         {
-            if (Mathf.Abs(transform.position.y) > Camera.main.orthographicSize + 1.0f && !m_IsDeading)
+            if ((Mathf.Abs(transform.position.y) > Camera.main.orthographicSize + 1.0f || Mathf.Abs(transform.position.x + 4.5f) > 0.1f) && !m_IsDeading)
             {
                 Dead();
             }
@@ -77,6 +103,7 @@ namespace Assets.Scripts.Core.Client.Models
         public void Dead()
         {
             GetComponent<Collider2D>().enabled = false;
+            GetComponent<Rigidbody2D>().simulated = false;
             m_Animator.Play("Idle");
             m_IsDeading = true;
             m_DeadSequence = DOTween.Sequence();
@@ -90,7 +117,6 @@ namespace Assets.Scripts.Core.Client.Models
             var twnDown = transform.DOMoveY(downY, downT).SetEase(Ease.InSine);
             m_DeadSequence.Append(twnUp);
             m_DeadSequence.Append(twnDown);
-
             ScenesManager.instance.Fail();
         }
 
@@ -98,11 +124,28 @@ namespace Assets.Scripts.Core.Client.Models
         {
             if (m_DeadSequence != null)
             {
-                m_DeadSequence.Complete();
+                m_DeadSequence.Kill();
             }
-            transform.position = Vector3.zero;
-            GetComponent<Collider2D>().enabled = true;
-            m_IsDeading = false;
+            m_Animator.Play("Run");
+            jumpThings.ForEach(j => j.SetActive(true));
+            GetComponentsInChildren<SpriteRenderer>().ToList().ForEach(s =>
+            {
+                s.DOFade(0.3f, 0.3f).SetLoops(10, LoopType.Yoyo).OnComplete(() =>
+                {
+                    s.DOFade(1.0f, 0.3f);
+                });
+            });
+
+            GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+            GetComponent<Rigidbody2D>().simulated = true;
+            GetComponent<Collider2D>().enabled = false;
+            DOTweenUtils.Delay(() =>
+            {
+                GetComponent<Collider2D>().enabled = true;
+                m_IsDeading = false;
+            }, 3.0f);
+            maxJumpCount = 99999;
+            m_JumpCount = 0;
         }
     }
 }

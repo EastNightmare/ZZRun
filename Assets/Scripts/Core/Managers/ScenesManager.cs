@@ -2,28 +2,32 @@
 using System.Collections.Generic;
 using System.Linq;
 using Assets.Scripts.Common;
-using Assets.Scripts.Core.Client.Models;
+using Assets.Scripts.Core.Models;
 using DG.Tweening;
-using MadLevelManager;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
-namespace Assets.Scripts.Core.Client.Managers
+namespace Assets.Scripts.Core.Managers
 {
     public class ScenesManager : SingletonMonoBehaviour<ScenesManager>
     {
         public int sceneIdx = 0;
         public GameObject girl;
         public GameObject boy;
+        public GameObject love;
         public GameObject pauseMenu, pauseButton, failMenu, mainMenu;
+        public GameObject[] stageIn;
+        public GameObject signal;
         public Button btnJump;
+        public Slider slider;
         public List<SceneConfig> sceneConfig;
         private Dictionary<GameObject, float> m_Stacks = new Dictionary<GameObject, float>();
         private List<GameObject> m_ViewGOs = new List<GameObject>();
         private List<GameObject> m_Platforms = new List<GameObject>();
         private List<Tweener> m_Twners = new List<Tweener>();
+        public float percent;
 
         public SceneConfig curSceneConfig
         {
@@ -62,6 +66,7 @@ namespace Assets.Scripts.Core.Client.Managers
 
         public void GameStart(int idx)
         {
+            stageIn[idx].SetActive(true);
             pauseButton.SetActive(true);
             sceneIdx = idx;
             ResetGame();
@@ -80,17 +85,86 @@ namespace Assets.Scripts.Core.Client.Managers
 
             var girlScript = girl.GetComponent<Girl>();
             girlScript.btnJump = btnJump;
-            girlScript.Reborn();
+
             var pos = new Vector3(curSceneConfig.characterStartX, firstPlatform.position.y, girl.transform.position.z);
             girl.transform.position = pos;
 
-            var boyGO = Object.Instantiate<GameObject>(boy, lastPlatform);
-            boyGO.transform.localPosition = Vector3.zero;
+            if (sceneIdx == sceneConfig.Count - 1)
+            {
+                boy = Object.Instantiate<GameObject>(boy, lastPlatform);
+                boy.transform.localPosition = new Vector3(1.9f, 0.0f, 0.0f);
+            }
+            else
+            {
+                var loveGO = Object.Instantiate<GameObject>(love, lastPlatform);
+                loveGO.transform.localPosition = Vector3.zero;
+            }
+        }
+
+        public void End()
+        {
+            m_Twners.ForEach(t => t.Kill());
+            btnJump.gameObject.SetActive(false);
+            girl.GetComponent<Girl>().enabled = false;
+            girl.GetComponent<Rigidbody2D>().simulated = false;
+            girl.transform.parent = m_Platforms[m_Platforms.Count - 1].transform;
+            girl.transform.localPosition = new Vector3(girl.transform.localPosition.x, 0.0f, 0.0f);
+            pauseButton.SetActive(false);
+            slider.gameObject.SetActive(false);
+            m_Platforms[m_Platforms.Count - 1].transform.DOLocalMove(new Vector3(0.0f, -3.34f, 0.0f), 3.0f).OnComplete(
+                () =>
+                {
+                    signal.SetActive(true);
+                });
+        }
+
+        public void WalkClose()
+        {
+            girl.transform.DOLocalMove(new Vector3(-0.6f, 0.0f, 0.0f), 2.0f);
+            boy.transform.DOLocalMove(new Vector3(0.6f, 0.0f, 0.0f), 2.0f);
+        }
+
+        public void MakeLove()
+        {
+            var loveGO = Object.Instantiate<GameObject>(love);
+            loveGO.transform.localPosition = Vector3.zero;
+            loveGO.transform.DOScale(Vector3.one * 10.0f, 2.0f);
         }
 
         public void Restart()
         {
             GameStart(sceneIdx);
+            Play();
+        }
+
+        public void Continute()
+        {
+            var girlScript = girl.GetComponent<Girl>();
+            var pos = new Vector3(curSceneConfig.characterStartX, 1.0f, girl.transform.position.z);
+            girl.transform.position = pos;
+            girlScript.Reborn();
+            var thePercent = m_Twners[0].Elapsed() / curSceneConfig.time;
+            m_Twners.ForEach(t =>
+            {
+                var time = 0.0f;
+                if (thePercent >= 0.0f && thePercent < 0.25f)
+                {
+                    time = 0.0f;
+                }
+                else if (thePercent >= 0.25f && thePercent < 0.5f)
+                {
+                    time = curSceneConfig.time * 0.25f;
+                }
+                else if (thePercent >= 0.5f && thePercent < 0.75f)
+                {
+                    time = curSceneConfig.time * 0.5f;
+                }
+                else if (thePercent >= 0.75f && thePercent < 1.0f)
+                {
+                    time = curSceneConfig.time * 0.75f;
+                }
+                t.Goto(time, true);
+            });
             Play();
         }
 
@@ -115,7 +189,7 @@ namespace Assets.Scripts.Core.Client.Managers
         {
             m_Platforms.ForEach(Object.Destroy);
             m_Platforms.Clear();
-
+            girl.GetComponent<Girl>().jumpThings.Clear();
             m_Stacks.Keys.ToList().ForEach(Object.Destroy);
             m_Stacks.Clear();
 
@@ -127,6 +201,15 @@ namespace Assets.Scripts.Core.Client.Managers
         {
             LoopScene(sceneIdx);
             mainMenu.SetActive(true);
+            slider.gameObject.SetActive(true);
+        }
+
+        private void Update()
+        {
+            if (m_Twners != null && m_Twners.Count > 0)
+            {
+                slider.value = m_Twners[0].Elapsed() / curSceneConfig.time;
+            }
         }
 
         private void PlayBgm()
@@ -164,16 +247,16 @@ namespace Assets.Scripts.Core.Client.Managers
         {
             var stacksDic = new Dictionary<GameObject, float>();
             var midPlatform = platforms.Select(p => p.transform.GetChild(0)).ToList();
-            var stackNum = Random.Range(curSceneConfig.stackCountRange.x, curSceneConfig.stackCountRange.y);
+            var stackNum = Mathf.RoundToInt(Random.Range(curSceneConfig.stackCountRange.x, curSceneConfig.stackCountRange.y));
             var lengthList = new List<int>();
             for (int i = 0; i < midPlatform.Count; i++)
             {
                 var scale = Mathf.RoundToInt(midPlatform[i].transform.localScale.x);
                 if (curSceneConfig.stackCountCurve.keys.Length != 0)
                 {
-                    scale = Mathf.RoundToInt(curSceneConfig.stackCountCurve.Evaluate((float)i / midPlatform.Count));
+                    scale = Mathf.RoundToInt(curSceneConfig.stackCountCurve.Evaluate((float)i / midPlatform.Count)) * 10;
                 }
-                for (int j = 0; j < Mathf.Pow(scale, 2); j++)
+                for (int j = 0; j < scale; j++)
                 {
                     lengthList.Add(i);
                 }
@@ -184,7 +267,7 @@ namespace Assets.Scripts.Core.Client.Managers
                 var indexOfIdx = Random.Range(0, lengthList.Count - 1);
                 if (lengthList.Count == 0) break;
                 var index = lengthList[indexOfIdx];
-                lengthList.RemoveAt(indexOfIdx);
+
                 var platform = midPlatform[index];
                 var stacks = new GameObject("Stacks");
                 stacks.transform.parent = platform.parent;
@@ -207,15 +290,31 @@ namespace Assets.Scripts.Core.Client.Managers
                     stack.transform.localPosition = new Vector3(startX + curSceneConfig.stackWidthHeight.x * stack.transform.localScale.x / 2, curSceneConfig.stackWidthHeight.y / 2.0f * stack.transform.localScale.x, 0.0f);
                     startX += stack.transform.localScale.x * curSceneConfig.stackWidthHeight.x;
                 }
-                var offsetX = Random.Range(-platform.localScale.x / 2.0f * curSceneConfig.width + startX / 2.0f,
-                    platform.localScale.x / 2.0f * curSceneConfig.width - startX);
-                if (Mathf.Abs(offsetX) < curSceneConfig.width)
+
+                var offsetX = Random.Range(-platform.localScale.x / 2.0f * curSceneConfig.width + curSceneConfig.safeRange, platform.localScale.x / 2.0f * curSceneConfig.width - curSceneConfig.safeRange - startX);
+                if (platform.localScale.x < 4.0f)
                 {
                     offsetX = -startX / 2.0f;
                 }
                 stacks.transform.localPosition = new Vector3(offsetX, 0.0f, 0.0f);
                 stacks.transform.localEulerAngles = Vector3.zero;
-                if (stacksDic.Keys.Any(s => ((Vector3.Distance(s.transform.position, stacks.transform.position) - curSceneConfig.safeRange) < (startX + stacksDic[s]) / 2)))
+
+                var isDestroy = stacksDic.Keys.Any(s =>
+                {
+                    if (s.transform.parent == stacks.transform.parent)
+                    {
+                        if (s.transform.position.x - stacks.transform.position.x > 0)
+                        {
+                            return Vector3.Distance(s.transform.position, stacks.transform.position) - curSceneConfig.stackSafeDistance < startX;
+                        }
+                        else
+                        {
+                            return Vector3.Distance(s.transform.position, stacks.transform.position) - curSceneConfig.stackSafeDistance < stacksDic[s];
+                        }
+                    }
+                    return false;
+                });
+                if (isDestroy)
                 {
                     Object.Destroy(stacks);
                     stacks = null;
@@ -223,6 +322,7 @@ namespace Assets.Scripts.Core.Client.Managers
                 if (stacks != null)
                 {
                     stacksDic.Add(stacks, startX);
+                    lengthList.RemoveAt(indexOfIdx);
                 }
             }
             return stacksDic;
@@ -244,7 +344,7 @@ namespace Assets.Scripts.Core.Client.Managers
                 var height = Random.Range(curSceneConfig.heightRange.x, curSceneConfig.heightRange.y);
                 if (curSceneConfig.heightCurve.keys.Length != 0)
                 {
-                    height = Mathf.RoundToInt(curSceneConfig.heightCurve.Evaluate(x) * height);
+                    height = curSceneConfig.heightCurve.Evaluate(x) * height;
                 }
                 var go = CreateSinglePlatform(length, height);
                 var preGo = i == 0 ? gameObject : platforms[i - 1];
@@ -265,7 +365,7 @@ namespace Assets.Scripts.Core.Client.Managers
                     new Vector3(
                         prePosX + (preGoScale - 2 + length - 2) / 2 * curSceneConfig.width + 2 * curSceneConfig.sideWidth +
                         offsetX, offsetY, 0.0f);
-                pos = i == 0 ? Vector3.zero : pos;
+                pos = i == 0 ? new Vector3(0.0f, -1.0f, 0.0f) : pos;
                 go.transform.localPosition = pos;
                 platforms.Add(go);
                 var ran = Random.Range(0.0f, 1.0f);
@@ -276,6 +376,8 @@ namespace Assets.Scripts.Core.Client.Managers
 
                 var platformOffsetY = Random.Range(curSceneConfig.platformOffsetY.x,
                        curSceneConfig.platformOffsetY.y);
+                var platformOffsetX = Random.Range(curSceneConfig.platformOffsetX.x,
+                       curSceneConfig.platformOffsetX.y);
                 if (ran <= curSceneConfig.flipPercent)
                 {
                     var flipGo = Object.Instantiate(go, go.transform);
@@ -290,7 +392,7 @@ namespace Assets.Scripts.Core.Client.Managers
                     {
                         platformOffsetY = Mathf.RoundToInt(curSceneConfig.platformOffsetCurve.Evaluate(x) * platformOffsetY);
                     }
-                    flipGo.transform.localPosition += new Vector3(0.0f, platformOffsetY, 0.0f);
+                    flipGo.transform.localPosition += new Vector3(platformOffsetX, platformOffsetY, 0.0f);
                     if (flipGo.transform.position.y > Camera.main.orthographicSize)
                     {
                         flipGo.SetActive(false);
@@ -384,10 +486,11 @@ namespace Assets.Scripts.Core.Client.Managers
             public Vector2 oneStackNumRange = new Vector2(1, 5);
             public AnimationCurve oneStackNumCurve;
             public Vector2 stackScaleRange = new Vector2(0.5f, 2f);
+            public float stackSafeDistance = 2.0f;
             public AnimationCurve stackScaleCurve;
             public Vector2 platformOffsetY;
             public AnimationCurve platformOffsetCurve;
-
+            public Vector2 platformOffsetX;
             public float speed;
             public float flipPercent;
             public AnimationCurve flipCurve;
