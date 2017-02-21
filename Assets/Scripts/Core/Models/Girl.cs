@@ -33,6 +33,7 @@ namespace Assets.Scripts.Core.Models
                     m_Animator.Play("Jump");
                     body.velocity = Vector2.zero;
                     body.AddForce(jumpForce * Vector2.up);
+                    Time.timeScale = 1.0f;
                 }
             });
         }
@@ -43,6 +44,11 @@ namespace Assets.Scripts.Core.Models
             {
                 if (!m_IsDeading)
                 {
+                    if (maxJumpCount > 10)
+                    {
+                        ScenesManager.instance.jumpLost.SetActive(true);
+                    }
+
                     m_JumpCount = 0;
                     maxJumpCount = 2;
                 }
@@ -58,6 +64,7 @@ namespace Assets.Scripts.Core.Models
                 jumpThings.Add(col.gameObject);
                 col.gameObject.SetActive(false);
                 maxJumpCount = 99999;
+                ScenesManager.instance.vioceAc.PlayOneShot(ScenesManager.instance.jumpThingClip);
             }
 
             if (col.gameObject.tag == "Love")
@@ -73,6 +80,7 @@ namespace Assets.Scripts.Core.Models
                         ScenesManager.instance.GameStart(ScenesManager.instance.sceneIdx);
                     }
                 });
+                ScenesManager.instance.vioceAc.PlayOneShot(ScenesManager.instance.loveHitClip);
             }
 
             if (col.gameObject.tag == "Stack" && !m_IsDeading)
@@ -118,6 +126,7 @@ namespace Assets.Scripts.Core.Models
             m_DeadSequence.Append(twnUp);
             m_DeadSequence.Append(twnDown);
             ScenesManager.instance.Fail();
+            ScenesManager.instance.vioceAc.PlayOneShot(ScenesManager.instance.failClip);
         }
 
         public void Reborn()
@@ -146,6 +155,8 @@ namespace Assets.Scripts.Core.Models
             }, 3.0f);
             maxJumpCount = 99999;
             m_JumpCount = 0;
+            ScenesManager.instance.continuteMenu.SetActive(true);
+            Time.timeScale = 0.0f;
         }
     }
 }

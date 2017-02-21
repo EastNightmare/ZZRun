@@ -17,9 +17,15 @@ namespace Assets.Scripts.Core.Managers
         public GameObject girl;
         public GameObject boy;
         public GameObject love;
-        public GameObject pauseMenu, pauseButton, failMenu, mainMenu;
+        public GameObject pauseMenu, pauseButton, failMenu, mainMenu, continuteMenu;
+        public GameObject bkg;
         public GameObject[] stageIn;
-        public GameObject signal;
+        public AudioClip loveClip;
+        public AudioClip failClip, loveHitClip, jumpThingClip;
+        public GameObject yanhua;
+        public AudioSource vioceAc;
+        public GameObject quest;
+        public GameObject jumpLost;
         public Button btnJump;
         public Slider slider;
         public List<SceneConfig> sceneConfig;
@@ -111,24 +117,41 @@ namespace Assets.Scripts.Core.Managers
             girl.transform.localPosition = new Vector3(girl.transform.localPosition.x, 0.0f, 0.0f);
             pauseButton.SetActive(false);
             slider.gameObject.SetActive(false);
-            m_Platforms[m_Platforms.Count - 1].transform.DOLocalMove(new Vector3(0.0f, -3.34f, 0.0f), 3.0f).OnComplete(
+            var signal = girl.transform.GetChild(3).gameObject;
+            signal.SetActive(true);
+            GetComponent<AudioSource>().DOFade(0.0f, 2.0f);
+            m_Platforms[m_Platforms.Count - 1].transform.DOLocalMove(new Vector3(0.0f, -3.34f, 0.0f), 3.0f).SetDelay(1.5f).OnStart(
                 () =>
                 {
-                    signal.SetActive(true);
+                    GetComponent<AudioSource>().clip = loveClip;
+                    GetComponent<AudioSource>().Play();
+                    GetComponent<AudioSource>().DOFade(1.0f, 2.0f);
+                    signal.SetActive(false);
+                }).OnComplete(() =>
+                {
+                    quest.SetActive(true);
                 });
         }
 
         public void WalkClose()
         {
             girl.transform.DOLocalMove(new Vector3(-0.6f, 0.0f, 0.0f), 2.0f);
-            boy.transform.DOLocalMove(new Vector3(0.6f, 0.0f, 0.0f), 2.0f);
+            boy.transform.DOLocalMove(new Vector3(0.6f, 0.0f, 0.0f), 2.0f).OnComplete(MakeLove);
         }
 
         public void MakeLove()
         {
             var loveGO = Object.Instantiate<GameObject>(love);
-            loveGO.transform.localPosition = Vector3.zero;
-            loveGO.transform.DOScale(Vector3.one * 10.0f, 2.0f);
+            loveGO.transform.position = new Vector3(0f, -6f, 0f);
+            loveGO.transform.GetChild(0).gameObject.GetComponent<SpriteRenderer>().DOFade(0.0f, 2.0f).SetEase(Ease.Linear);
+            loveGO.transform.DOScale(Vector3.one * 10f, 2f).OnComplete(() =>
+            {
+                yanhua.SetActive(true);
+                DOTweenUtils.Delay(() =>
+                {
+                    bkg.SetActive(true);
+                }, 3.5f);
+            });
         }
 
         public void Restart()
@@ -142,7 +165,7 @@ namespace Assets.Scripts.Core.Managers
             var girlScript = girl.GetComponent<Girl>();
             var pos = new Vector3(curSceneConfig.characterStartX, 1.0f, girl.transform.position.z);
             girl.transform.position = pos;
-            girlScript.Reborn();
+
             var thePercent = m_Twners[0].Elapsed() / curSceneConfig.time;
             m_Twners.ForEach(t =>
             {
@@ -166,6 +189,12 @@ namespace Assets.Scripts.Core.Managers
                 t.Goto(time, true);
             });
             Play();
+            girlScript.Reborn();
+        }
+
+        public void SetTimeScale(float t)
+        {
+            Time.timeScale = t;
         }
 
         public void LoopScene(int idx)
@@ -201,7 +230,7 @@ namespace Assets.Scripts.Core.Managers
         {
             LoopScene(sceneIdx);
             mainMenu.SetActive(true);
-            slider.gameObject.SetActive(true);
+            //slider.gameObject.SetActive(true);
         }
 
         private void Update()
@@ -402,7 +431,7 @@ namespace Assets.Scripts.Core.Managers
                 if (curSceneConfig.jumpIdxs.Contains(i))
                 {
                     var jumpThing = Object.Instantiate<GameObject>(curSceneConfig.jumpThing, go.transform);
-                    jumpThing.transform.localPosition = new Vector3(-go.transform.GetChild(0).localScale.x / 2 * curSceneConfig.width - curSceneConfig.sideWidth - 1.0f, platformOffsetY / 2, 0.0f);
+                    jumpThing.transform.localPosition = new Vector3(-go.transform.GetChild(0).localScale.x / 2 * curSceneConfig.width - curSceneConfig.sideWidth - 3.0f, platformOffsetY / 2, 0.0f);
                 }
             }
             var firstWidth = (platforms[0].transform.GetChild(0).localScale.x * curSceneConfig.width +
